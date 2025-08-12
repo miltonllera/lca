@@ -1,0 +1,26 @@
+[project]
+name = "lca"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "accelerate>=1.10.0",
+    "equinox>=0.13.0",
+    "h5py>=3.14.0",
+    "jax>=0.7.0; sys_platform == 'darwin'",
+    "jax[cuda12]>=0.7.0; sys_platform == 'linux'",
+    "jaxlib>=0.7.0",
+    "jaxtyping>=0.3.2",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.5",
+    "numpy>=2.3.2",
+    "open-clip-torch>=3.1.0",
+    "optax>=0.2.5",
+    "pillow>=11.3.0",
+    "rootutils>=1.0.7",
+    "scikit-learn>=1.7.1",
+    "torch>=2.8.0",
+    "tqdm>=4.67.1",
+    "transformers>=4.55.0",
+]
