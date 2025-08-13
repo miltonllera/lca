@@ -38,3 +38,21 @@ class EmojiDataset:
     def sample_batch(self):
         idx = self.rng.choice(self.dataset_length, size=self.batch_size, replace=False)
         return self[idx]
+
+    def get_description(self, idx):
+        if self.file is None:
+            file = h5py.File(self.dataset_path, 'r')
+        else:
+            file = self.file
+
+        description = file['descriptions'][idx]  # type: ignore
+
+        if self.file is None:
+            file.close()
+        return description
+
+
+    def __del__(self):
+        if self.file is not None:
+            self.file.close()
+

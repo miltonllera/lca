@@ -46,10 +46,22 @@ def main(
     def init_fn(b, shape):
         return np.repeat(init_central_seed((lca.state_size, *shape))[None], repeats=b, axis=0)
 
+    if use_lr_schedule:
+        # warmup_iters = int(train_iters * 0.2)
+        # lr_or_schedule = optax.warmup_cosine_decay_schedule(
+        #     0.0, lr, warmup_iters, train_iters, 1e-5
+        # )
+        warmup_iters = min(2000, int(training_iters * 0.2))
+        lr_or_schedule = optax.warmup_cosine_decay_schedule(
+            0.0, learning_rate, warmup_iters, training_iters - 2000, end_value=1e-5
+        )
+    else:
+        lr_or_schedule = learning_rate
+
     optim = optax.chain(
         optax.clip_by_global_norm(1.0),
         # optax.clip_by_block_rms(1.0),
-        optax.adamw(learning_rate),
+        optax.adamw(lr_or_schedule),
     )
     opt_state = optim.init(eqx.filter(lca, eqx.is_array))
 
