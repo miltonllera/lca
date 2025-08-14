@@ -16,7 +16,7 @@ from src.model.lca import AttentionLCA
 from src.nn.seeding import init_central_seed
 from src.dataset.emojis import EmojiDataset
 from src.visualisation.utils import plot_examples
-from src.utils import seed_everything, save_pytree
+from src.utils import filter_put, get_sharding_specs, seed_everything, save_pytree
 
 
 def main(
@@ -31,7 +31,9 @@ def main(
     save_folder: str | Path = 'data/logs/temp',
     seed: int | None = None
 ):
+    # setup
     rng, jax_key = seed_everything(seed)
+    batch_sharding, model_sharding = get_sharding_specs()
 
     dataset = EmojiDataset(dataset_path, batch_size, rng)
 
@@ -43,6 +45,9 @@ def main(
         key=jax_key,
     )
 
+    if model_sharding is not None:
+        lca = filter_put(lca, model_sharding)
+
     def init_fn(b, shape):
         return np.repeat(init_central_seed((lca.state_size, *shape))[None], repeats=b, axis=0)
 
@@ -51,10 +56,11 @@ def main(
         # lr_or_schedule = optax.warmup_cosine_decay_schedule(
         #     0.0, lr, warmup_iters, train_iters, 1e-5
         # )
-        warmup_iters = min(2000, int(training_iters * 0.2))
+        warmup_iters = max(2000, int(training_iters * 0.2))
         lr_or_schedule = optax.warmup_cosine_decay_schedule(
             0.0, learning_rate, warmup_iters, training_iters - 2000, end_value=1e-5
         )
+        # lr_or_schedule = optax.warmup_constant_schedule(0.0, learning_rate, warmup_iters)
     else:
         lr_or_schedule = learning_rate
 
@@ -94,6 +100,8 @@ def main(
     for i in (pbar := tqdm(range(training_iters))):
         jax_key, step_key = jr.split(jax_key, 2)
         batch = dataset.sample_batch()
+        if batch_sharding is not None:
+            batch = filter_put(batch, batch_sharding)
         train_loss, lca, opt_state = train_step(lca, batch, opt_state, step_key)  #type: ignore
         pbar.set_postfix_str(f"iter: {i}; loss: {np.asarray(train_loss)}")
 

@@ -6,6 +6,8 @@ from typing import Any
 from jaxtyping import PyTree
 
 import numpy as np
+import jax
+from jax.sharding import NamedSharding, PartitionSpec as P
 import jax.random as jr
 import equinox as eqx
 # import wandb
@@ -52,6 +54,27 @@ def load_pytree(checkpoint_file: str | Path, template: PyTree):
     checkpoint_file = Path(checkpoint_file)
     assert checkpoint_file.is_file()
     return eqx.tree_deserialise_leaves(checkpoint_file.with_suffix(".eqx"), template)
+
+
+#--------------------------------------- Parallelization -----------------------------------------
+
+def get_sharding_specs():
+    n_devices = len(jax.devices(backend='gpu'))
+    if n_devices > 1:
+        mesh = jax.make_mesh((n_devices,), ('batch'))
+        sharding = NamedSharding(mesh, P('batch'))
+        replicated_sharding = NamedSharding(mesh, P())
+    else:
+        sharding = None
+        replicated_sharding = None
+
+    return sharding, replicated_sharding
+
+
+def filter_put(model: PyTree, sharding):
+    params, static = eqx.partition(model, eqx.is_array)
+    params = jax.device_put(params, sharding)
+    return eqx.combine(params, static)
 
 
 #-------------------------------------------- WandB ----------------------------------------------
