@@ -10,7 +10,7 @@ import jax
 from jax.sharding import NamedSharding, PartitionSpec as P
 import jax.random as jr
 import equinox as eqx
-# import wandb
+import wandb
 
 
 def seed_everything(seed: int | None):
@@ -79,14 +79,11 @@ def filter_put(model: PyTree, sharding):
 
 #-------------------------------------------- WandB ----------------------------------------------
 
-# def init_wandb(**kwargs):
-#     return wandb.init(
-#         entity="mlle",
-#         project="morphogen-dev",
-#         name=f"{kwargs['dataset']}_" \
-#              f"{kwargs['model']}_" \
-#              f"{kwargs['morphogen_type']}_" \
-#              f"{kwargs['perception_type']}",
-#         config=kwargs
-#     )
+def init_wandb(**kwargs):
+    return wandb.init(
+        entity="mlle",
+        project="lca",
+        name=Path(kwargs['save_folder']).name,
+        config=kwargs,
+    )
 

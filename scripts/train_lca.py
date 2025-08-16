@@ -16,7 +16,7 @@ from src.model.lca import AttentionLCA
 from src.nn.seeding import init_central_seed
 from src.dataset.emojis import EmojiDataset
 from src.visualisation.utils import plot_examples
-from src.utils import filter_put, get_sharding_specs, seed_everything, save_pytree
+from src.utils.base import filter_put, get_sharding_specs, init_wandb, seed_everything, save_pytree
 
 
 def main(
@@ -29,7 +29,9 @@ def main(
     learning_rate: float,
     use_lr_schedule: bool = False,
     save_folder: str | Path = 'data/logs/temp',
-    seed: int | None = None
+    seed: int | None = None,
+    *,
+    run,
 ):
     # setup
     rng, jax_key = seed_everything(seed)
@@ -52,13 +54,9 @@ def main(
         return np.repeat(init_central_seed((lca.state_size, *shape))[None], repeats=b, axis=0)
 
     if use_lr_schedule:
-        # warmup_iters = int(train_iters * 0.2)
-        # lr_or_schedule = optax.warmup_cosine_decay_schedule(
-        #     0.0, lr, warmup_iters, train_iters, 1e-5
-        # )
-        warmup_iters = max(2000, int(training_iters * 0.2))
+        warmup_iters = int(training_iters * 0.1)
         lr_or_schedule = optax.warmup_cosine_decay_schedule(
-            0.0, learning_rate, warmup_iters, training_iters - 2000, end_value=1e-5
+            0.0, learning_rate, warmup_iters, training_iters, end_value=5e-6, exponent=1.25,
         )
         # lr_or_schedule = optax.warmup_constant_schedule(0.0, learning_rate, warmup_iters)
     else:
@@ -85,25 +83,26 @@ def main(
 
         return jnp.sum(optax.l2_loss(preds, targets)) / len(targets)
 
-    @eqx.filter_jit
+    @eqx.filter_jit(donate='all')
     def train_step(
         model: PyTree,
-        batch: tuple[Float[Array, "NCHW"], Float[Array, "NCHW"]],
         opt_state: PyTree,
+        batch: tuple[Float[Array, "NCHW"], Float[Array, "NCHW"]],
         key: jax.Array,
     ):
         loss_value, grads = eqx.filter_value_and_grad(compute_loss)(model, batch, key)
         updates, opt_state = optim.update(grads, opt_state, model)
         model = eqx.apply_updates(model, updates)
-        return loss_value, model, opt_state
+        return model, opt_state, loss_value
 
     for i in (pbar := tqdm(range(training_iters))):
         jax_key, step_key = jr.split(jax_key, 2)
         batch = dataset.sample_batch()
         if batch_sharding is not None:
             batch = filter_put(batch, batch_sharding)
-        train_loss, lca, opt_state = train_step(lca, batch, opt_state, step_key)  #type: ignore
+        lca, opt_state, train_loss = train_step(lca, opt_state, batch, step_key)  #type: ignore
         pbar.set_postfix_str(f"iter: {i}; loss: {np.asarray(train_loss)}")
+        run.log({"mse": float(train_loss)})
 
     batch_key = jr.split(jax_key, 8)
     prompts, targets = dataset[list(range(8))]
@@ -176,5 +175,6 @@ if __name__ == "__main__":
     )
 
     args = vars(parser.parse_args())
-    main(**args)
+    with init_wandb(**args) as run:
+        main(**args, run=run)
 
